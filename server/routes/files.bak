@@ -1,0 +1,89 @@
+const express = require('express');
+const mongoose = require('mongoose');
+const upload = require('../config/multer');
+const Document = require('../models/Document');
+const User = require('../models/User');
+const router = express.Router();
+
+// @route   POST api/files/upload
+// @desc    Upload file
+// @access  Public
+router.post('/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ errors: [{ msg: 'No file uploaded' }] });
+  }
+
+  try {
+    const { userId } = req.body;
+
+    // Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ errors: [{ msg: 'User not found' }] });
+    }
+
+    const document = new Document({
+      user: new mongoose.Types.ObjectId(userId),
+      filename: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      data: req.file.buffer
+    });
+
+    await document.save();
+
+    user.documents.push(document);
+    await user.save();
+
+    res.json({ message: 'File uploaded successfully', document });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+});
+
+// @route   POST api/files/uploads
+// @desc    Upload multiple files
+// @access  Public
+router.post('/uploads', upload.array('files', 10), async (req, res) => {
+
+  console.log(req.body)
+
+  return
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ errors: [{ msg: 'No files uploaded' }] });
+  }
+
+  try {
+    const { userId } = req.body;
+
+    // Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ errors: [{ msg: 'User not found' }] });
+    }
+
+    const documents = await Promise.all(req.files.map(async (file) => {
+      const document = new Document({
+        user: new mongoose.Types.ObjectId(userId),
+        filename: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        data: file.buffer
+      });
+
+      await document.save();
+      return document;
+    }));
+
+    user.documents.push(...documents);
+    await user.save();
+
+    res.json({ message: 'Files uploaded successfully', documents });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+});
+
+module.exports = router;
