@@ -4,32 +4,43 @@
     <v-card class="mb-5">
       <v-card-title>Add User</v-card-title>
       <v-card-text>
-        <v-form ref="userForm" @submit.prevent="addUserWithDocument">
-          <v-text-field v-model="newUser.name" label="Name" required></v-text-field>
-          <v-text-field v-model="newUser.email" label="Email" required></v-text-field>
-          <v-text-field v-model="documentTitle" label="Document Title" required></v-text-field>
-          <v-file-input v-model="file" label="Choose File" accept="*/*" required></v-file-input>
-          <v-btn type="submit" color="primary">Add User</v-btn>
+        <v-form ref="userForm">
+          <v-text-field
+            v-model="newUser.name"
+            label="Name"
+            required
+          ></v-text-field>
+          <v-text-field
+            v-model="newUser.email"
+            label="Email"
+            required
+          ></v-text-field>
+          <v-text-field
+            v-model="documentTitle"
+            label="Document Title"
+          ></v-text-field>
+          <v-file-input
+            v-model="file"
+            label="Choose File"
+            accept="*/*"
+          ></v-file-input>
+          <v-btn @click="handleFileUpload" color="primary" class="mr-1">Upload File</v-btn>
+          <v-btn @click="handleUserSave" color="secondary" class="mr-1">Save User</v-btn>
+          <v-btn @click="cancelUpload" color="red">Cancel Upload</v-btn>
+          <v-progress-linear class="my-3 " :value="uploadProgress" height="25">
+            <strong>{{ uploadProgress }}%</strong>
+          </v-progress-linear>
+
+          <v-img
+            v-if="filePreviewUrl"
+            :src="filePreviewUrl"
+            max-width="500"
+            class="mt-4"
+          ></v-img>
         </v-form>
       </v-card-text>
     </v-card>
 
-    <!-- Update User Section -->
-    <v-card class="mb-5" v-if="selectedUser">
-      <v-card-title>Update User</v-card-title>
-      <v-card-text>
-        <v-form ref="updateForm" @submit.prevent="onUpdateUser">
-          <v-text-field v-model="updateUser.name" label="Name" required></v-text-field>
-          <v-text-field v-model="updateUser.email" label="Email" required></v-text-field>
-          <v-text-field v-model="updateDocumentTitle" label="Document Title"></v-text-field>
-          <v-file-input v-model="updateFile" label="Choose File"></v-file-input>
-          <v-btn type="submit" color="primary">Update User</v-btn>
-        </v-form>
-      </v-card-text>
-    </v-card>
-
-
-    <!-- User Profile Section -->
     <v-card class="mb-5">
       <v-card-title>User Profiles</v-card-title>
       <v-card-text>
@@ -45,7 +56,9 @@
                 <td>{{ item.name }}</td>
                 <td>{{ item.email }}</td>
                 <td>
-                  <v-btn @click="viewUser(item._id)" color="primary">View</v-btn>
+                  <v-btn @click="viewUser(item._id)" color="primary"
+                    >View</v-btn
+                  >
                 </td>
               </tr>
             </tbody>
@@ -61,15 +74,23 @@
         <v-list>
           <v-list-item>
             <v-list-item-content>
-              <v-list-item-title>Name: {{ selectedUser.name }}</v-list-item-title>
-              <v-list-item-subtitle>Email: {{ selectedUser.email }}</v-list-item-subtitle>
+              <v-list-item-title
+                >Name: {{ selectedUser.name }}</v-list-item-title
+              >
+              <v-list-item-subtitle
+                >Email: {{ selectedUser.email }}</v-list-item-subtitle
+              >
             </v-list-item-content>
           </v-list-item>
           <v-list-item v-for="doc in selectedUser.documents" :key="doc._id">
             <v-list-item-content>
               <v-list-item-title>{{ doc.title }}</v-list-item-title>
               <v-list-item-subtitle>
-                <a :href="'http://localhost:4200/' + doc.content" target="_blank">View Document</a>
+                <a
+                  :href="'http://localhost:4200/' + doc.content"
+                  target="_blank"
+                  >View Document</a
+                >
               </v-list-item-subtitle>
             </v-list-item-content>
           </v-list-item>
@@ -98,12 +119,12 @@ export default {
       },
       documentTitle: '',
       file: null,
-      updateUser: {
-        name: '',
-        email: ''
-      },
-      updateDocumentTitle: '',
-      updateFile: null
+      filePreviewUrl: null,
+      uploadProgress: 0,
+      uploading: false,
+      uploadedDocumentId: null,
+      uploadAbortController: null, 
+      tempFileUrl: null 
     };
   },
   created() {
@@ -118,59 +139,87 @@ export default {
         console.error('Error fetching users:', error);
       }
     },
-    async addUserWithDocument() {
-      if (!this.file) return;
+    async handleFileUpload() {
+      if (!this.file) {
+        alert('Please choose a file to upload.');
+        return;
+      }
+
       const formData = new FormData();
-      formData.append('name', this.newUser.name);
-      formData.append('email', this.newUser.email);
-      formData.append('title', this.documentTitle);
       formData.append('document', this.file);
+      formData.append('title', this.documentTitle);
+
+      this.uploading = true;
+
+      this.uploadAbortController = new AbortController();
 
       try {
-        const response = await axios.post('http://localhost:4200/api/users', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+        const response = await axios.post('http://localhost:4200/api/users/documents/temp-upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          signal: this.uploadAbortController.signal,
+          onUploadProgress: progressEvent => {
+            this.uploadProgress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+          }
         });
+
+        this.uploadedDocumentId = response.data._id; 
+        this.tempFileUrl = response.data.tempFileUrl; 
+        this.filePreviewUrl = `http://localhost:4200/uploads/${response.data.filename}`;
+        console.log(response.data)
+
+        alert('File uploaded temporarily');
+      } catch (error) {
+        if (error.name === 'CanceledError') {
+          console.log('Upload canceled');
+        } else {
+          console.error('Error uploading file:', error);
+          alert('Error uploading file');
+        }
+      } finally {
+        this.uploading = false;
+      }
+    },
+    async handleUserSave() {
+      const userData = {
+        name: this.newUser.name,
+        email: this.newUser.email,
+        documentId: this.uploadedDocumentId 
+      };
+
+      try {
+        const response = await axios.post('http://localhost:4200/api/users', userData);
         this.users.push(response.data);
         this.$refs.userForm.reset();
         this.newUser = { name: '', email: '' };
-        this.documentTitle = '';
         this.file = null;
+        this.filePreviewUrl = null; 
+        this.uploadedDocumentId = null; 
+        this.tempFileUrl = null;
+        this.documentTitle = '';
       } catch (error) {
-        console.error('Error adding user and document:', error);
-        alert('Error adding user and document');
+        console.error('Error adding user:', error);
+        alert('Error adding user');
       }
     },
-    async onUpdateUser() {
-      if (!this.selectedUser) return;
-      const formData = new FormData();
-      formData.append('name', this.updateUser.name);
-      formData.append('email', this.updateUser.email);
-      if (this.updateFile) {
-        formData.append('title', this.updateDocumentTitle);
-        formData.append('document', this.updateFile);
+    cancelUpload() {
+      if (this.uploadAbortController) {
+        this.uploadAbortController.abort();
       }
 
-      try {
-        const response = await axios.put(`http://localhost:4200/api/users/${this.selectedUser._id}`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        const index = this.users.findIndex(user => user._id === response.data._id);
-        this.$set(this.users, index, response.data);
-        this.$refs.updateForm.reset();
-        this.updateUser = { name: '', email: '' };
-        this.updateDocumentTitle = '';
-        this.updateFile = null;
-        this.selectedUser = null; 
-      } catch (error) {
-        console.error('Error updating user:', error);
-        alert('Error updating user');
+      if (this.uploadedDocumentId) {
+        axios.delete(`http://localhost:4200/api/users/documents/temp-upload/${this.uploadedDocumentId}`);
       }
+
+      this.file = null;
+      this.filePreviewUrl = null; 
+      this.uploadedDocumentId = null; 
+      this.tempFileUrl = null; 
+      this.uploading = false;
     },
     async viewUser(id) {
       try {
         const response = await axios.get(`http://localhost:4200/api/users/${id}`);
         this.selectedUser = response.data;
-        this.updateUser = { name: this.selectedUser.name, email: this.selectedUser.email };
       } catch (error) {
         console.error('Error fetching user details:', error);
       }
