@@ -24,10 +24,17 @@
             label="Choose File"
             accept="*/*"
           ></v-file-input>
-          <v-btn @click="handleFileUpload" color="primary" class="mr-1">Upload File</v-btn>
-          <v-btn @click="handleUserSave" color="secondary" class="mr-1">Save User</v-btn>
+          <v-btn @click="handleFileUpload" color="primary" class="mr-1"
+            >Upload File</v-btn
+          >
+          <v-btn @click="handleUserSave" color="secondary" class="mr-1"
+            >Save User</v-btn
+          >
+          <v-btn @click="handleTest" color="secondary" class="mr-1"
+            >Test Button</v-btn
+          >
           <v-btn @click="cancelUpload" color="red">Cancel Upload</v-btn>
-          <v-progress-linear class="my-3 " :value="uploadProgress" height="25">
+          <v-progress-linear class="my-3" :value="uploadProgress" height="25">
             <strong>{{ uploadProgress }}%</strong>
           </v-progress-linear>
 
@@ -101,104 +108,183 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axios from "axios";
 
 export default {
   data() {
     return {
       headers: [
-        { text: 'Name', value: 'name' },
-        { text: 'Email', value: 'email' },
-        { text: 'Actions', value: 'actions', sortable: false }
+        { text: "Name", value: "name" },
+        { text: "Email", value: "email" },
+        { text: "Actions", value: "actions", sortable: false },
       ],
       users: [],
       selectedUser: null,
       newUser: {
-        name: '',
-        email: ''
+        name: "",
+        email: "",
       },
-      documentTitle: '',
+      documentTitle: "",
       file: null,
       filePreviewUrl: null,
       uploadProgress: 0,
       uploading: false,
       uploadedDocumentId: null,
-      uploadAbortController: null, 
-      tempFileUrl: null 
+      uploadAbortController: null,
+      tempFileUrl: null,
     };
   },
   created() {
     this.fetchUsers();
+    window.addEventListener("beforeunload", this.handlePageUnload);
+    // axios.defaults.withCredentials = true;
+  },
+  destroyed() {
+    window.removeEventListener("beforeunload", this.handlePageUnload);
   },
   methods: {
-    async fetchUsers() {
-      try {
-        const response = await axios.get('http://localhost:4200/api/users');
-        this.users = response.data;
-      } catch (error) {
-        console.error('Error fetching users:', error);
+    async handlePageUnload() {
+      if (this.uploadedDocumentId) {
+        try {
+          await axios.delete(
+            `http://localhost:4200/api/users/documents/temp-upload/${this.uploadedDocumentId}`
+          );
+          console.log("Temporary file deleted on page unload");
+        } catch (error) {
+          console.error("Error deleting temporary file:", error);
+        }
       }
     },
+    async fetchUsers() {
+      try {
+        const response = await axios.get("http://localhost:4200/api/users");
+        this.users = response.data;
+      } catch (error) {
+        console.error("Error fetching users:", error);
+      }
+    },
+    // async handleFileUpload() {
+    //   if (!this.file) {
+    //     alert('Please choose a file to upload.');
+    //     return;
+    //   }
+
+    //   const formData = new FormData();
+    //   formData.append('document', this.file);
+    //   formData.append('title', this.documentTitle);
+
+    //   this.uploading = true;
+
+    //   this.uploadAbortController = new AbortController();
+
+    //   try {
+    //     const response = await axios.post('http://localhost:4200/api/users/documents/temp-upload', formData, {
+    //       headers: { 'Content-Type': 'multipart/form-data' },
+    //       signal: this.uploadAbortController.signal,
+    //       onUploadProgress: progressEvent => {
+    //         this.uploadProgress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+    //       }
+    //     });
+
+    //     this.uploadedDocumentId = response.data._id;
+    //     this.tempFileUrl = response.data.tempFileUrl;
+    //     this.filePreviewUrl = `http://localhost:4200/uploads/${response.data.filename}`;
+    //     console.log(response.data)
+
+    //     alert('File uploaded temporarily');
+    //   } catch (error) {
+    //     if (error.name === 'CanceledError') {
+    //       console.log('Upload canceled');
+    //     } else {
+    //       console.error('Error uploading file:', error);
+    //       alert('Error uploading file');
+    //     }
+    //   } finally {
+    //     this.uploading = false;
+    //   }
+    // },
+    // async handleUserSave() {
+    //   const userData = {
+    //     name: this.newUser.name,
+    //     email: this.newUser.email,
+    //     documentId: this.uploadedDocumentId
+    //   };
+
+    //   try {
+    //     const response = await axios.post('http://localhost:4200/api/users', userData);
+    //     this.users.push(response.data);
+    //     this.$refs.userForm.reset();
+    //     this.newUser = { name: '', email: '' };
+    //     this.file = null;
+    //     this.filePreviewUrl = null;
+    //     this.uploadedDocumentId = null;
+    //     this.tempFileUrl = null;
+    //     this.documentTitle = '';
+    //   } catch (error) {
+    //     console.error('Error adding user:', error);
+    //     alert('Error adding user');
+    //   }
+    // },
+
     async handleFileUpload() {
       if (!this.file) {
-        alert('Please choose a file to upload.');
+        alert("Please choose a file to upload.");
         return;
       }
 
       const formData = new FormData();
-      formData.append('document', this.file);
-      formData.append('title', this.documentTitle);
+      formData.append("document", this.file);
+      formData.append("title", this.documentTitle);
 
       this.uploading = true;
 
-      this.uploadAbortController = new AbortController();
-
       try {
-        const response = await axios.post('http://localhost:4200/api/users/documents/temp-upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          signal: this.uploadAbortController.signal,
-          onUploadProgress: progressEvent => {
-            this.uploadProgress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+        const response = await axios.post(
+          "http://localhost:4200/api/users/documents/temp-upload",
+          formData,
+          {
+            headers: { "Content-Type": "multipart/form-data" },
+            onUploadProgress: (progressEvent) => {
+              this.uploadProgress = Math.round(
+                (progressEvent.loaded / progressEvent.total) * 100
+              );
+            },
           }
-        });
+        );
 
-        this.uploadedDocumentId = response.data._id; 
-        this.tempFileUrl = response.data.tempFileUrl; 
-        this.filePreviewUrl = `http://localhost:4200/uploads/${response.data.filename}`;
-        console.log(response.data)
-
-        alert('File uploaded temporarily');
+        this.filePreviewUrl = URL.createObjectURL(this.file);
+        console.log(response.data);
+        alert("File uploaded temporarily");
       } catch (error) {
-        if (error.name === 'CanceledError') {
-          console.log('Upload canceled');
-        } else {
-          console.error('Error uploading file:', error);
-          alert('Error uploading file');
-        }
+        console.error("Error uploading file:", error);
+        alert("Error uploading file");
       } finally {
         this.uploading = false;
       }
     },
+
     async handleUserSave() {
       const userData = {
         name: this.newUser.name,
         email: this.newUser.email,
-        documentId: this.uploadedDocumentId 
+        documentTitle: this.documentTitle, // Send the document title if needed
       };
 
       try {
-        const response = await axios.post('http://localhost:4200/api/users', userData);
+        const response = await axios.post(
+          "http://localhost:4200/api/users",
+          userData
+        );
         this.users.push(response.data);
         this.$refs.userForm.reset();
-        this.newUser = { name: '', email: '' };
+        this.newUser = { name: "", email: "" };
         this.file = null;
-        this.filePreviewUrl = null; 
-        this.uploadedDocumentId = null; 
-        this.tempFileUrl = null;
-        this.documentTitle = '';
+        this.filePreviewUrl = null;
+        this.uploadedDocumentId = null;
+        this.documentTitle = "";
       } catch (error) {
-        console.error('Error adding user:', error);
-        alert('Error adding user');
+        console.error("Error adding user:", error);
+        alert("Error adding user");
       }
     },
     cancelUpload() {
@@ -207,23 +293,35 @@ export default {
       }
 
       if (this.uploadedDocumentId) {
-        axios.delete(`http://localhost:4200/api/users/documents/temp-upload/${this.uploadedDocumentId}`);
+        axios.delete(
+          `http://localhost:4200/api/users/documents/temp-upload/${this.uploadedDocumentId}`
+        );
       }
 
       this.file = null;
-      this.filePreviewUrl = null; 
-      this.uploadedDocumentId = null; 
-      this.tempFileUrl = null; 
+      this.filePreviewUrl = null;
+      this.uploadedDocumentId = null;
+      this.tempFileUrl = null;
       this.uploading = false;
     },
     async viewUser(id) {
       try {
-        const response = await axios.get(`http://localhost:4200/api/users/${id}`);
+        const response = await axios.get(
+          `http://localhost:4200/api/users/${id}`
+        );
         this.selectedUser = response.data;
       } catch (error) {
-        console.error('Error fetching user details:', error);
+        console.error("Error fetching user details:", error);
       }
-    }
-  }
+    },
+
+    async handleTest() {
+      try {
+        await axios.post(`http://localhost:4200/api/users/test/sample/session`);
+      } catch (error) {
+        console.error("Error fetching user details:", error);
+      }
+    },
+  },
 };
 </script>

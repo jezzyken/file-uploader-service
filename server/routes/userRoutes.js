@@ -5,23 +5,69 @@ const Document = require("../models/document");
 const upload = require("../config/multerConfig");
 const path = require("path");
 const fs = require("fs");
+const multer = require('multer');
 
-router.post("/", async (req, res) => {
-  console.log(req.body);
+// Configure multer for memory storage
+const storage = multer.memoryStorage();
+const uploadx = multer({ storage: storage });
+
+// router.post("/", async (req, res) => {
+//   console.log(req.body);
+//   try {
+//     const user = new User({
+//       name: req.body.name,
+//       email: req.body.email,
+//       documents: req.body.documentUrl ? [req.body.documentUrl] : [],
+//     });
+//     await user.save();
+
+//     res.status(201).json(user);
+//   } catch (error) {
+//     console.log(error);
+//     res.status(400).json({ error: error.message });
+//   }
+// });
+router.post('/', async (req, res) => {
   try {
+    console.log('Session tempFile:', req.session);
+
+    return
+
     const user = new User({
       name: req.body.name,
       email: req.body.email,
-      documents: req.body.documentUrl ? [req.body.documentUrl] : [],
     });
+
     await user.save();
+
+    if (req.session.tempFile) {
+      // Save the file to disk
+      const filename = `${Date.now()}-${req.session.tempFile.originalname}`;
+      const filePath = path.join(__dirname, '../uploads', filename); // Adjust the path as needed
+      fs.writeFileSync(filePath, req.session.tempFile.buffer);
+
+      // Create a document entry in the database
+      const document = new Document({
+        title: req.session.tempFile.originalname,
+        content: filePath,
+      });
+      await document.save();
+
+      // Associate the document with the user
+      user.documents.push(document._id);
+      await user.save();
+
+      // Clear the temp file from the session
+      req.session.tempFile = null;
+    }
 
     res.status(201).json(user);
   } catch (error) {
-    console.log(error);
     res.status(400).json({ error: error.message });
   }
 });
+
+
 
 router.post("/upload", upload.single("document"), async (req, res) => {
   try {
@@ -44,31 +90,65 @@ router.post("/upload", upload.single("document"), async (req, res) => {
   }
 });
 
-router.post(
-  "/documents/temp-upload",
-  upload.single("document"),
-  async (req, res) => {
-    try {
-      if (!req.file)
-        return res.status(400).json({ message: "No file uploaded" });
+// router.post(
+//   "/documents/temp-upload",
+//   upload.single("document"),
+//   async (req, res) => {
+//     try {
+//       if (!req.file)
+//         return res.status(400).json({ message: "No file uploaded" });
 
-      const document = new Document({
-        title: req.body.title || req.file.originalname,
-        content: req.file.path,
-        isTemporary: true,
-      });
-      const savedDocument = await document.save();
+//       const document = new Document({
+//         title: req.body.title || req.file.originalname,
+//         content: req.file.path,
+//         isTemporary: true,
+//       });
+//       const savedDocument = await document.save();
 
-      res.status(201).json({
-        _id: savedDocument._id,
-        tempFileUrl: req.file.path,
-        filename: req.file.filename,
-      });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
+//       res.status(201).json({
+//         _id: savedDocument._id,
+//         tempFileUrl: req.file.path,
+//         filename: req.file.filename,
+//       });
+//     } catch (error) {
+//       res.status(500).json({ error: error.message });
+//     }
+//   }
+// );
+
+router.post('/documents/temp-upload', uploadx.single('document'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
+    // Log the session before setting tempFile
+
+    req.session.tempFile = {
+      buffer: req.file.buffer,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype
+    };
+
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error:', err);
+        return res.status(500).json({ error: 'Failed to save session' });
+      }
+      res.status(201).json({ message: 'File uploaded temporarily' });
+    });
+
+    console.log('Session before setting tempFile:', req.session);
+
+
+    // Log the session after setting tempFile
+    // console.log('Session after setting tempFile:', req.session);
+
+    // res.status(201).json({ message: 'File uploaded temporarily' });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: error.message });
   }
-);
+});
+
 
 router.get("/", async (req, res) => {
   try {
@@ -138,5 +218,13 @@ router.delete("/documents/temp-upload/:id", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+router.post('/test/sample/session', (req, res) => {
+
+  console.log('Session before saving user:', req.session  );
+
+ 
+});
+
 
 module.exports = router;
